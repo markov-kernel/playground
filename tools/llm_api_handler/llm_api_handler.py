@@ -5,9 +5,16 @@ and support for JSON mode, developer messages, tools, etc."""
 import os
 import base64
 import json
-from typing import List, Dict, Optional, Union, Any
+from typing import List, Dict, Optional, Union, Any, Tuple
 import litellm
-from litellm import completion
+from litellm import (
+    completion,
+    token_counter,
+    completion_cost,
+    cost_per_token,
+    get_max_tokens,
+    model_cost
+)
 
 
 class llm_api_handler:
@@ -20,6 +27,7 @@ class llm_api_handler:
         supporting JSON-mode, developer messages, function tools, etc.
       - PDF processing with base64 encoding (example usage with Anthropic).
       - Structured JSON completions with user-defined JSON schemas.
+      - Token usage tracking and cost calculation for all completions.
     """
 
     def __init__(self):
@@ -47,6 +55,61 @@ class llm_api_handler:
         self.o1_default_model = "o1"
         self.o1_default_reasoning_effort = "medium"
 
+    def get_token_usage(self, response: litellm.ModelResponse) -> Dict[str, Any]:
+        """
+        Extract token usage and cost information from a completion response.
+        
+        Args:
+            response (litellm.ModelResponse): The response from a completion call
+            
+        Returns:
+            Dict[str, Any]: Dictionary containing:
+                - prompt_tokens: Number of tokens in the prompt
+                - completion_tokens: Number of tokens in the completion
+                - total_tokens: Total tokens used
+                - cost_usd: Total cost in USD for the API call
+        """
+        usage = {
+            "prompt_tokens": response.usage.prompt_tokens,
+            "completion_tokens": response.usage.completion_tokens,
+            "total_tokens": response.usage.total_tokens,
+            "cost_usd": response._hidden_params.get("response_cost", 0.0)
+        }
+        return usage
+
+    def count_message_tokens(self, messages: List[Dict[str, Any]], model: str) -> int:
+        """
+        Count the number of tokens in a message list before sending to the API.
+        
+        Args:
+            messages (List[Dict[str, Any]]): The messages to count tokens for
+            model (str): The model to use for token counting
+            
+        Returns:
+            int: Number of tokens in the messages
+        """
+        return token_counter(model=model, messages=messages)
+
+    def get_model_token_limits(self, model: str) -> Dict[str, Any]:
+        """
+        Get token limits and pricing information for a specific model.
+        
+        Args:
+            model (str): The model to get information for
+            
+        Returns:
+            Dict[str, Any]: Dictionary containing:
+                - max_tokens: Maximum tokens allowed
+                - input_cost_per_token: Cost per input token
+                - output_cost_per_token: Cost per output token
+        """
+        model_info = model_cost.get(model, {})
+        return {
+            "max_tokens": model_info.get("max_tokens", get_max_tokens(model)),
+            "input_cost_per_token": model_info.get("input_cost_per_token", 0),
+            "output_cost_per_token": model_info.get("output_cost_per_token", 0)
+        }
+
     def process_pdf(
         self,
         pdf_path: str,
@@ -54,7 +117,7 @@ class llm_api_handler:
         model: str = "anthropic/claude-3-5-sonnet-20241022",
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None
-    ) -> str:
+    ) -> Dict[str, Any]:
         """
         Process a PDF file using the specified model.
         This includes encoding the PDF as base64 and sending it via `image_url` (PDF) to Anthropic (or similar model).
@@ -67,7 +130,9 @@ class llm_api_handler:
             temperature (float, optional): Temperature for response generation
 
         Returns:
-            str: Model's free-form response after processing the PDF
+            Dict[str, Any]: Dictionary containing:
+                - content: Model's free-form response after processing the PDF
+                - usage: Token usage and cost information
         """
         # Encode PDF file to base64
         with open(pdf_path, "rb") as pdf_file:
@@ -95,7 +160,10 @@ class llm_api_handler:
             temperature=temperature or self.default_temperature
         )
 
-        return response.choices[0].message.content
+        return {
+            "content": response.choices[0].message.content,
+            "usage": self.get_token_usage(response)
+        }
 
     def chat_completion(
         self,
@@ -104,7 +172,7 @@ class llm_api_handler:
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
         stream: bool = False
-    ) -> Union[str, litellm.ModelResponse]:
+    ) -> Union[litellm.ModelResponse, Dict[str, Any]]:
         """
         Generic chat completion request to the specified model (e.g., Anthropic, OpenAI, etc.).
 
@@ -118,8 +186,13 @@ class llm_api_handler:
             stream (bool): Whether to stream the response (returns a ModelResponse generator if True)
 
         Returns:
-            str if stream=False, or a litellm.ModelResponse generator if stream=True
+            Union[litellm.ModelResponse, Dict[str, Any]]: 
+                - If stream=True: Returns the ModelResponse generator
+                - If stream=False: Returns a dict with 'content' and 'usage' information
         """
+        # Pre-count tokens in messages if needed
+        # message_tokens = self.count_message_tokens(messages, model)
+        
         response = completion(
             model=model,
             messages=messages,
@@ -130,7 +203,11 @@ class llm_api_handler:
 
         if stream:
             return response
-        return response.choices[0].message.content
+            
+        return {
+            "content": response.choices[0].message.content,
+            "usage": self.get_token_usage(response)
+        }
 
     def structured_json_completion(
         self,
@@ -139,7 +216,7 @@ class llm_api_handler:
         model: str = "deepseek/deepseek-chat",
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None
-    ) -> Dict:
+    ) -> Dict[str, Any]:
         """
         Generate a structured (JSON) response using litellm's JSON-mode.
 
@@ -151,8 +228,10 @@ class llm_api_handler:
             temperature (float, optional): Temperature for response generation
 
         Returns:
-            Dict: The LLM's JSON-parsed response.
-                  If the LLM output is invalid JSON, you may need to handle exceptions or re-try logic.
+            Dict[str, Any]: Dictionary containing:
+                - content: The LLM's JSON-parsed response
+                - usage: Token usage and cost information
+                If the LLM output is invalid JSON, you may need to handle exceptions or re-try logic.
         """
         messages = [{"role": "user", "content": prompt}]
 
@@ -168,7 +247,10 @@ class llm_api_handler:
         )
 
         output_str = response.choices[0].message.content
-        return json.loads(output_str)
+        return {
+            "content": json.loads(output_str),
+            "usage": self.get_token_usage(response)
+        }
 
     def reasoning_chat_completion(
         self,
@@ -181,7 +263,7 @@ class llm_api_handler:
         response_format: Optional[Dict] = None,
         tools: Optional[List[Dict]] = None,
         tool_choice: Optional[Union[str, Dict]] = None
-    ) -> Union[str, litellm.ModelResponse]:
+    ) -> Union[litellm.ModelResponse, Dict[str, Any]]:
         """
         A specialized chat completion method for O1 models with default (medium) reasoning effort.
         Supports JSON mode, developer role messages, and function tools.
@@ -202,8 +284,9 @@ class llm_api_handler:
                 (e.g. 'none', 'auto', 'required', or {"type": "function", "function": {"name": "<your_function>"}}).
 
         Returns:
-            Union[str, litellm.ModelResponse]: 
-                A string if stream=False, or a ModelResponse generator if stream=True.
+            Union[litellm.ModelResponse, Dict[str, Any]]: 
+                - If stream=True: Returns the ModelResponse generator
+                - If stream=False: Returns a dict with 'content' and 'usage' information
         """
         chosen_model = model if model else self.o1_default_model
         chosen_reasoning_effort = reasoning_effort if reasoning_effort else self.o1_default_reasoning_effort
@@ -221,10 +304,12 @@ class llm_api_handler:
         )
 
         if stream:
-            # Return the streaming generator
             return response
 
-        return response.choices[0].message.content
+        return {
+            "content": response.choices[0].message.content,
+            "usage": self.get_token_usage(response)
+        }
 
 
 # -------------------------------------------------------------------------
