@@ -1,0 +1,101 @@
+# GLOBAL RULES
+
+Before we start developing, we will create a functionaldesign.md file to be used as context. I will provide the initial requirements, you will ask questions until all the requirements are clear.
+
+Do NOT start writing code until the functional design is ready! Make sure to write the code step by step and ask for permissions before continueing to the next step.
+
+Add the top of every file, add comments stating what the file will do or does including the decisions we made.
+
+Don't overegineer but follow requirements and add TO DOs for future improvements or additional complexity.
+
+
+
+Rule 1: Architecture and Design Principles
+
+Description: Encourage SOLID principles, separation of concerns, and a modular architecture.
+
+
+Actions:
+
+Adhere to SOLID (Single Responsibility, Open-Closed, Liskov Substitution, Interface Segregation, Dependency Inversion).
+Separate concerns into well-defined modules, classes, or packages.
+Avoid massive ‘god’ classes or monolithic modules—split code logically.
+Use design patterns (Factory, Strategy, etc.) where appropriate to reduce complexity.
+Rule 2: Code Duplication and Refactoring
+
+Description: Prevent duplicate code by applying DRY (Don’t Repeat Yourself). Encourage refactoring to centralize common logic.
+
+
+
+Actions:
+
+If a code snippet is repeated in 2+ places, factor it into a helper function or class method.
+Eliminate redundant code paths or logic branches; refactor to reuse existing implementations.
+Use small, single-purpose functions or methods (ideally under ~40 lines) that can be composed together.
+Rule 3: Function and Class Size
+
+Description: Keep functions, methods, and classes concise to improve readability and maintainability.
+
+
+
+Actions:
+
+Limit function/method length to maintain clarity; prefer multiple small functions over one large block.
+Avoid classes that handle multiple unrelated responsibilities; split them into logical parts.
+Consider cyclomatic complexity; if a function has too many branches, break it down further.
+Rule 4: Error Handling and Logging
+
+Description: Ensure consistent, clear error handling and logging. Avoid silent failures or excessive nested try-excepts.
+
+
+
+Actions:
+
+Use structured exception handling; raise or wrap exceptions with meaningful messages.
+Log critical events and errors with a consistent format and severity level.
+Avoid excessive or overlapping try-except blocks; handle errors as close to the source as possible.
+Rule 5: Config and Constants
+
+Description: Keep environment-specific details and constants separate from core logic. Use configuration files or environment variables.
+
+
+
+Actions:
+
+Store constants in a dedicated file or module (e.g., config.py) for clarity.
+Use environment variables or config management tools (like Hydra, Pydantic, or .env) instead of hardcoding values.
+Ensure that code remains portable and testable by avoiding environment-specific paths or URLs inline.
+Rule 6: Code Reviews and CI
+
+Description: Promote a peer-review culture and continuous integration to maintain code quality.
+
+
+
+Actions:
+
+Require code review or pull requests for all non-trivial changes; avoid direct commits to main branches.
+Set up a CI pipeline (GitHub Actions, GitLab CI, etc.) that runs tests, linting, and checks for duplication.
+Use static analysis tools (e.g., SonarQube or CodeClimate) to detect code smells or high complexity.
+Rule 7: Documentation and Onboarding
+
+Description: Keep external and inline documentation up to date to accelerate onboarding and maintenance.
+
+
+
+Actions:
+
+Maintain a clear README or wiki with project structure, setup instructions, and major architectural decisions.
+Document edge cases or complex logic via docstrings or short inline comments.
+Use consistent docstring conventions (Google, NumPy, or reStructuredText) for clarity.
+Rule 8: Future Maintenance
+
+Description: Write code with future maintainers in mind. Keep it simple, flexible, and robust.
+
+
+
+Actions:
+
+Apply YAGNI (You Aren’t Gonna Need It): only implement required functionality to avoid bloat.
+Refactor legacy sections in small increments (continuous refactoring).
+Use meaningful naming for variables, functions, and classes to convey intent.
+Periodically prune outdated or dead code, ensuring the codebase remains lean.
